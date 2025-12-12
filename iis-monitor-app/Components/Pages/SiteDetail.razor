@@ -117,7 +117,7 @@ else
                             </tr>
                             <tr>
                                 <td class="fw-bold">Last Checked</td>
-                                <td>@(_site.LastChecked?.ToString("yyyy-MM-dd HH:mm:ss") ?? "--")</td>
+                                <td>@(_site.LastChecked.HasValue ? FormatTime(_site.LastChecked.Value) : "--")</td>
                             </tr>
                             <tr>
                                 <td class="fw-bold">Response Time</td>
@@ -193,7 +193,7 @@ else
                         {
                             <div class="@(entry.IsResponding ? "bg-success" : "bg-danger")"
                                  style="width: 20px; height: 30px; border-radius: 3px;"
-                                 title="@entry.Timestamp.ToString("HH:mm:ss") - @(entry.IsResponding ? $"OK ({entry.ResponseTimeMs}ms)" : entry.ErrorMessage ?? "Error")">
+                                 title="@FormatTimeShort(entry.Timestamp) - @(entry.IsResponding ? $"OK ({entry.ResponseTimeMs}ms)" : entry.ErrorMessage ?? "Error")">
                             </div>
                         }
                     </div>
@@ -214,7 +214,7 @@ else
                             @foreach (var entry in _history)
                             {
                                 <tr class="@(!entry.IsResponding ? "table-danger" : "")">
-                                    <td><small>@entry.Timestamp.ToString("MM/dd HH:mm:ss")</small></td>
+                                    <td><small>@FormatTimeShort(entry.Timestamp)</small></td>
                                     <td>
                                         <span class="badge @(entry.IsResponding ? "bg-success" : "bg-danger")">
                                             @(entry.HttpStatusCode?.ToString() ?? (entry.IsResponding ? "OK" : "Error"))
@@ -261,6 +261,7 @@ else
     private List<StatusHistoryEntry> _history = new();
     private HealthSummary _healthSummary = new();
     private bool _isLoading;
+    private static readonly TimeZoneInfo _easternZone = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
 
     protected override void OnInitialized()
     {
@@ -300,5 +301,19 @@ else
             return $":{port}";
         }
         return "";
+    }
+
+    private string FormatTime(DateTime utcTime)
+    {
+        var eastern = TimeZoneInfo.ConvertTimeFromUtc(utcTime, _easternZone);
+        var offset = _easternZone.IsDaylightSavingTime(eastern) ? "EDT" : "EST";
+        return $"{eastern:yyyy-MM-dd HH:mm:ss} {offset}";
+    }
+
+    private string FormatTimeShort(DateTime utcTime)
+    {
+        var eastern = TimeZoneInfo.ConvertTimeFromUtc(utcTime, _easternZone);
+        var offset = _easternZone.IsDaylightSavingTime(eastern) ? "EDT" : "EST";
+        return $"{eastern:MM/dd HH:mm:ss} {offset}";
     }
 }

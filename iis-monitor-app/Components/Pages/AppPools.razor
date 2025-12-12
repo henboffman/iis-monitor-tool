@@ -73,7 +73,7 @@
                                 <strong>Idle Timeout:</strong> @pool.ProcessModel.IdleTimeout<br />
                                 @if (pool.Recycling.PrivateMemory > 0)
                                 {
-                                    <strong>Memory Limit:</strong> @(pool.Recycling.PrivateMemory / 1024) MB<br>
+                                    <strong>Memory Limit:</strong> <span>@(pool.Recycling.PrivateMemory / 1024) MB</span><br />
                                 }
                             </small>
                         </div>

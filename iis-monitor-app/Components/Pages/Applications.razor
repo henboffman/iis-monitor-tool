@@ -100,7 +100,7 @@
                     <td>
                         @if (app.LastChecked.HasValue)
                         {
-                            <small class="text-muted">@app.LastChecked.Value.ToString("HH:mm:ss")</small>
+                            <small class="text-muted">@FormatTimeShort(app.LastChecked.Value)</small>
                         }
                         else
                         {
@@ -130,6 +130,7 @@
 @code {
     private List<ApplicationInfo> _apps = new();
     private bool _isLoading;
+    private static readonly TimeZoneInfo _easternZone = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
 
     protected override void OnInitialized()
     {
@@ -158,5 +159,12 @@
     private void NavigateToApp(ApplicationInfo app)
     {
         Navigation.NavigateTo($"/applications/{Uri.EscapeDataString(app.SiteName)}{app.Path}");
+    }
+
+    private string FormatTimeShort(DateTime utcTime)
+    {
+        var eastern = TimeZoneInfo.ConvertTimeFromUtc(utcTime, _easternZone);
+        var offset = _easternZone.IsDaylightSavingTime(eastern) ? "EDT" : "EST";
+        return $"{eastern:HH:mm:ss} {offset}";
     }
 }

@@ -30,7 +30,10 @@ else
                 App Pool: <a href="/apppools/@Uri.EscapeDataString(_app.AppPoolName)">@_app.AppPoolName</a>
             </small>
         </div>
-        <div>
+        <div class="d-flex align-items-center gap-3">
+            <button class="btn btn-outline-primary" @onclick="RefreshData" disabled="@_isLoading">
+                <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+            </button>
             @if (_app.LastChecked.HasValue)
             {
                 <span class="badge fs-5 @(_app.IsResponding ? "bg-success" : "bg-danger")">
@@ -113,7 +116,7 @@ else
                             </tr>
                             <tr>
                                 <td class="fw-bold">Last Checked</td>
-                                <td>@(_app.LastChecked?.ToString("yyyy-MM-dd HH:mm:ss") ?? "--")</td>
+                                <td>@(_app.LastChecked.HasValue ? FormatTime(_app.LastChecked.Value) : "--")</td>
                             </tr>
                             <tr>
                                 <td class="fw-bold">Physical Path</td>
@@ -127,7 +130,7 @@ else
                             {
                                 <tr>
                                     <td class="fw-bold">Last Downtime</td>
-                                    <td class="text-danger">@_healthSummary.LastDowntime.Value.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                    <td class="text-danger">@FormatTime(_healthSummary.LastDowntime.Value)</td>
                                 </tr>
                             }
                         </tbody>
@@ -159,7 +162,7 @@ else
                                 <div class="list-group-item">
                                     <div class="d-flex justify-content-between align-items-start">
                                         <span class="badge bg-danger me-2">@(error.HttpStatusCode?.ToString() ?? "Error")</span>
-                                        <small class="text-muted">@error.Timestamp.ToString("MM/dd HH:mm:ss")</small>
+                                        <small class="text-muted">@FormatTimeShort(error.Timestamp)</small>
                                     </div>
                                     @if (!string.IsNullOrEmpty(error.ErrorMessage))
                                     {
@@ -198,7 +201,7 @@ else
                         {
                             <div class="@(entry.IsResponding ? "bg-success" : "bg-danger")"
                                  style="width: 20px; height: 30px; border-radius: 3px;"
-                                 title="@entry.Timestamp.ToString("HH:mm:ss") - @(entry.IsResponding ? $"OK ({entry.ResponseTimeMs}ms)" : entry.ErrorMessage ?? "Error")">
+                                 title="@FormatTimeShort(entry.Timestamp) - @(entry.IsResponding ? $"OK ({entry.ResponseTimeMs}ms)" : entry.ErrorMessage ?? "Error")">
                             </div>
                         }
                     </div>
@@ -219,7 +222,7 @@ else
                             @foreach (var entry in _history)
                             {
                                 <tr class="@(!entry.IsResponding ? "table-danger" : "")">
-                                    <td><small>@entry.Timestamp.ToString("MM/dd HH:mm:ss")</small></td>
+                                    <td><small>@FormatTimeShort(entry.Timestamp)</small></td>
                                     <td>
                                         <span class="badge @(entry.IsResponding ? "bg-success" : "bg-danger")">
                                             @(entry.HttpStatusCode?.ToString() ?? (entry.IsResponding ? "OK" : "Error"))
@@ -267,6 +270,7 @@ else
     private List<StatusHistoryEntry> _history = new();
     private HealthSummary _healthSummary = new();
     private bool _isLoading;
+    private static readonly TimeZoneInfo _easternZone = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
 
     protected override void OnInitialized()
     {
@@ -294,5 +298,19 @@ else
         }
 
         _isLoading = false;
+    }
+
+    private string FormatTime(DateTime utcTime)
+    {
+        var eastern = TimeZoneInfo.ConvertTimeFromUtc(utcTime, _easternZone);
+        var offset = _easternZone.IsDaylightSavingTime(eastern) ? "EDT" : "EST";
+        return $"{eastern:yyyy-MM-dd HH:mm:ss} {offset}";
+    }
+
+    private string FormatTimeShort(DateTime utcTime)
+    {
+        var eastern = TimeZoneInfo.ConvertTimeFromUtc(utcTime, _easternZone);
+        var offset = _easternZone.IsDaylightSavingTime(eastern) ? "EDT" : "EST";
+        return $"{eastern:MM/dd HH:mm:ss} {offset}";
     }
 }

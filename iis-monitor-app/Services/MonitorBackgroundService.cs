@@ -15,7 +15,13 @@ public class MonitorBackgroundService : BackgroundService
         _iisMonitor = iisMonitor;
         _logger = logger;
         _config = config;
-        _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+
+        // Create HttpClient that accepts self-signed/invalid SSL certificates (common in dev/internal environments)
+        var handler = new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+        };
+        _httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

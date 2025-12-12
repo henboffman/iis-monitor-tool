@@ -188,7 +188,7 @@
         <i class="bi bi-arrow-clockwise me-1"></i>
         @(_isLoading ? "Refreshing..." : "Refresh")
     </button>
-    <small class="text-muted ms-3">Last updated: @_lastUpdate.ToString("HH:mm:ss")</small>
+    <small class="text-muted ms-3">Last updated: @_lastUpdate.ToString("HH:mm:ss") @(TimeZoneInfo.Local.IsDaylightSavingTime(_lastUpdate) ? "EDT" : "EST")</small>
 </div>
 
 @code {

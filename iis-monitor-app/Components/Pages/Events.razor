@@ -105,7 +105,7 @@
                     @foreach (var evt in FilteredEvents.Take(200))
                     {
                         <tr class="@(evt.EventType == "Error" ? "table-danger" : "table-warning")">
-                            <td><small>@evt.TimeGenerated.ToString("MM/dd HH:mm:ss")</small></td>
+                            <td><small>@evt.TimeGenerated.ToString("MM/dd HH:mm:ss") @GetTimezoneAbbr()</small></td>
                             <td>
                                 <span class="badge @(evt.EventType == "Error" ? "bg-danger" : "bg-warning")">
                                     @evt.EventType
@@ -163,5 +163,10 @@
         _allSources = _events.Select(e => e.Source).Distinct().OrderBy(s => s).ToList();
 
         _isLoading = false;
+    }
+
+    private string GetTimezoneAbbr()
+    {
+        return TimeZoneInfo.Local.IsDaylightSavingTime(DateTime.Now) ? "EDT" : "EST";
     }
 }
