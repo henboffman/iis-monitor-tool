@@ -9,15 +9,15 @@
 {
     <div class="alert alert-warning">
         <i class="bi bi-exclamation-triangle me-2"></i>
-        Site not found. <a href="/sites">Return to Sites</a>
+        Site not found. <a href="sites">Return to Sites</a>
     </div>
 }
 else
 {
     <nav aria-label="breadcrumb" class="mb-3">
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="/">Overview</a></li>
-            <li class="breadcrumb-item"><a href="/sites">Sites</a></li>
+            <li class="breadcrumb-item"><a href="">Overview</a></li>
+            <li class="breadcrumb-item"><a href="sites">Sites</a></li>
             <li class="breadcrumb-item active">@_site.Name</li>
         </ol>
     </nav>
@@ -26,7 +26,7 @@ else
         <div>
             <h1 class="mb-0">@_site.Name</h1>
             <small class="text-muted">
-                App Pool: <a href="/apppools/@Uri.EscapeDataString(_site.AppPoolName)">@_site.AppPoolName</a>
+                App Pool: <a href="apppools/@Uri.EscapeDataString(_site.AppPoolName)">@_site.AppPoolName</a>
             </small>
         </div>
         <div>
@@ -141,7 +141,7 @@ else
                         <div class="list-group list-group-flush">
                             @foreach (var app in _site.Applications)
                             {
-                                <a href="@($"/applications/{Uri.EscapeDataString(_site.Name)}{app.Path}")" class="list-group-item list-group-item-action @(!app.IsResponding && app.LastChecked.HasValue ? "list-group-item-danger" : "")">
+                                <a href="@($"applications/{Uri.EscapeDataString(_site.Name)}{app.Path}")" class="list-group-item list-group-item-action @(!app.IsResponding && app.LastChecked.HasValue ? "list-group-item-danger" : "")">
                                     <div class="d-flex justify-content-between align-items-center">
                                         <div>
                                             <strong>@app.Path</strong>
@@ -248,7 +248,7 @@ else
         <button class="btn btn-primary" @onclick="RefreshData" disabled="@_isLoading">
             <i class="bi bi-arrow-clockwise me-1"></i>Refresh
         </button>
-        <a href="/sites" class="btn btn-outline-secondary ms-2">
+        <a href="sites" class="btn btn-outline-secondary ms-2">
             <i class="bi bi-arrow-left me-1"></i>Back to Sites
         </a>
     </div>

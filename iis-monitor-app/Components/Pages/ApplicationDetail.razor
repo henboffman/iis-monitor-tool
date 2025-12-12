@@ -9,15 +9,15 @@
 {
     <div class="alert alert-warning">
         <i class="bi bi-exclamation-triangle me-2"></i>
-        Application not found. <a href="/applications">Return to Applications</a>
+        Application not found. <a href="applications">Return to Applications</a>
     </div>
 }
 else
 {
     <nav aria-label="breadcrumb" class="mb-3">
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="/">Overview</a></li>
-            <li class="breadcrumb-item"><a href="/applications">Applications</a></li>
+            <li class="breadcrumb-item"><a href="">Overview</a></li>
+            <li class="breadcrumb-item"><a href="applications">Applications</a></li>
             <li class="breadcrumb-item active">@_app.Path</li>
         </ol>
     </nav>
@@ -26,8 +26,8 @@ else
         <div>
             <h1 class="mb-0">@_app.Path</h1>
             <small class="text-muted">
-                Site: <a href="/sites/@Uri.EscapeDataString(_app.SiteName)">@_app.SiteName</a> |
-                App Pool: <a href="/apppools/@Uri.EscapeDataString(_app.AppPoolName)">@_app.AppPoolName</a>
+                Site: <a href="sites/@Uri.EscapeDataString(_app.SiteName)">@_app.SiteName</a> |
+                App Pool: <a href="apppools/@Uri.EscapeDataString(_app.AppPoolName)">@_app.AppPoolName</a>
             </small>
         </div>
         <div class="d-flex align-items-center gap-3">
@@ -256,7 +256,7 @@ else
         <button class="btn btn-primary" @onclick="RefreshData" disabled="@_isLoading">
             <i class="bi bi-arrow-clockwise me-1"></i>Refresh
         </button>
-        <a href="/applications" class="btn btn-outline-secondary ms-2">
+        <a href="applications" class="btn btn-outline-secondary ms-2">
             <i class="bi bi-arrow-left me-1"></i>Back to Applications
         </a>
     </div>

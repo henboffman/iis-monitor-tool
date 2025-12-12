@@ -51,14 +51,14 @@
             {
                 <tr class="@GetRowClass(app)" style="cursor: pointer;" @onclick="() => NavigateToApp(app)">
                     <td>
-                        <a href="@($"/applications/{Uri.EscapeDataString(app.SiteName)}{app.Path}")" class="text-decoration-none">
+                        <a href="@($"applications/{Uri.EscapeDataString(app.SiteName)}{app.Path}")" class="text-decoration-none">
                             <strong>@app.Path</strong>
                         </a>
                         <br />
                         <small class="text-muted">@TruncatePath(app.PhysicalPath)</small>
                     </td>
                     <td>
-                        <a href="/sites/@Uri.EscapeDataString(app.SiteName)" class="text-decoration-none">@app.SiteName</a>
+                        <a href="sites/@Uri.EscapeDataString(app.SiteName)" class="text-decoration-none">@app.SiteName</a>
                         <span class="badge @(app.SiteState == "Started" ? "bg-success" : "bg-secondary") ms-1">
                             @app.SiteState
                         </span>
@@ -158,7 +158,7 @@
 
     private void NavigateToApp(ApplicationInfo app)
     {
-        Navigation.NavigateTo($"/applications/{Uri.EscapeDataString(app.SiteName)}{app.Path}");
+        Navigation.NavigateTo($"applications/{Uri.EscapeDataString(app.SiteName)}{app.Path}");
     }
 
     private string FormatTimeShort(DateTime utcTime)

@@ -82,12 +82,12 @@
                             {
                                 <tr class="@(!app.IsResponding && app.LastChecked.HasValue ? "table-danger" : "")" style="cursor: pointer;" @onclick="() => NavigateToApp(app)">
                                     <td>
-                                        <a href="@($"/applications/{Uri.EscapeDataString(app.SiteName)}{app.Path}")" class="text-decoration-none">
+                                        <a href="@($"applications/{Uri.EscapeDataString(app.SiteName)}{app.Path}")" class="text-decoration-none">
                                             <strong>@app.Path</strong>
                                         </a>
                                     </td>
                                     <td>
-                                        <a href="/sites/@Uri.EscapeDataString(app.SiteName)" class="text-decoration-none text-muted" @onclick:stopPropagation="true">
+                                        <a href="sites/@Uri.EscapeDataString(app.SiteName)" class="text-decoration-none text-muted" @onclick:stopPropagation="true">
                                             <small>@app.SiteName</small>
                                         </a>
                                     </td>
@@ -124,7 +124,7 @@
             @if (_apps.Count > 10)
             {
                 <div class="card-footer text-center">
-                    <a href="/applications" class="btn btn-sm btn-outline-primary">View all @_apps.Count applications</a>
+                    <a href="applications" class="btn btn-sm btn-outline-primary">View all @_apps.Count applications</a>
                 </div>
             }
             @if (_apps.Count == 0)
@@ -176,7 +176,7 @@
             @if (_eventSummary.RecentEvents.Count > 8)
             {
                 <div class="card-footer text-center">
-                    <a href="/events" class="btn btn-sm btn-outline-primary">View all events</a>
+                    <a href="events" class="btn btn-sm btn-outline-primary">View all events</a>
                 </div>
             }
         </div>
@@ -241,6 +241,6 @@
 
     private void NavigateToApp(ApplicationInfo app)
     {
-        Navigation.NavigateTo($"/applications/{Uri.EscapeDataString(app.SiteName)}{app.Path}");
+        Navigation.NavigateTo($"applications/{Uri.EscapeDataString(app.SiteName)}{app.Path}");
     }
 }
