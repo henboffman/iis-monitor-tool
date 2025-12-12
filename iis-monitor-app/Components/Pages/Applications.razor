@@ -1,5 +1,6 @@
 @page "/applications"
 @inject IISMonitorService IISMonitor
+@inject NavigationManager Navigation
 @rendermode InteractiveServer
 
 <PageTitle>IIS Monitor - Applications</PageTitle>
@@ -48,14 +49,16 @@
         <tbody>
             @foreach (var app in _apps.OrderBy(a => a.SiteName).ThenBy(a => a.Path))
             {
-                <tr class="@GetRowClass(app)">
+                <tr class="@GetRowClass(app)" style="cursor: pointer;" @onclick="() => NavigateToApp(app)">
                     <td>
-                        <strong>@app.Path</strong>
+                        <a href="/applications/@Uri.EscapeDataString(app.SiteName)@app.Path" class="text-decoration-none">
+                            <strong>@app.Path</strong>
+                        </a>
                         <br />
                         <small class="text-muted">@TruncatePath(app.PhysicalPath)</small>
                     </td>
                     <td>
-                        @app.SiteName
+                        <a href="/sites/@Uri.EscapeDataString(app.SiteName)" class="text-decoration-none">@app.SiteName</a>
                         <span class="badge @(app.SiteState == "Started" ? "bg-success" : "bg-secondary") ms-1">
                             @app.SiteState
                         </span>
@@ -72,7 +75,7 @@
                             }
                             else
                             {
-                                <span class="badge bg-danger">
+                                <span class="badge bg-danger" title="@app.ErrorMessage">
                                     <i class="bi bi-x-circle me-1"></i>@(app.HttpStatusCode?.ToString() ?? "Error")
                                 </span>
                             }
@@ -150,5 +153,10 @@
     {
         if (string.IsNullOrEmpty(path)) return "N/A";
         return path.Length > 40 ? "..." + path[^37..] : path;
+    }
+
+    private void NavigateToApp(ApplicationInfo app)
+    {
+        Navigation.NavigateTo($"/applications/{Uri.EscapeDataString(app.SiteName)}{app.Path}");
     }
 }

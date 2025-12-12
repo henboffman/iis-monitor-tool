@@ -1,0 +1,298 @@
+@page "/applications/{SiteName}/{*AppPath}"
+@inject IISMonitorService IISMonitor
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+
+<PageTitle>IIS Monitor - @(_app?.Path ?? "Application")</PageTitle>
+
+@if (_app == null)
+{
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        Application not found. <a href="/applications">Return to Applications</a>
+    </div>
+}
+else
+{
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/">Overview</a></li>
+            <li class="breadcrumb-item"><a href="/applications">Applications</a></li>
+            <li class="breadcrumb-item active">@_app.Path</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="mb-0">@_app.Path</h1>
+            <small class="text-muted">
+                Site: <a href="/sites/@Uri.EscapeDataString(_app.SiteName)">@_app.SiteName</a> |
+                App Pool: <a href="/apppools/@Uri.EscapeDataString(_app.AppPoolName)">@_app.AppPoolName</a>
+            </small>
+        </div>
+        <div>
+            @if (_app.LastChecked.HasValue)
+            {
+                <span class="badge fs-5 @(_app.IsResponding ? "bg-success" : "bg-danger")">
+                    @(_app.IsResponding ? "Healthy" : "Unhealthy")
+                </span>
+            }
+            else
+            {
+                <span class="badge fs-5 bg-secondary">Pending</span>
+            }
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="card h-100 text-center">
+                <div class="card-body">
+                    <h3 class="@(_healthSummary.UptimePercentage >= 99 ? "text-success" : _healthSummary.UptimePercentage >= 95 ? "text-warning" : "text-danger")">
+                        @_healthSummary.UptimePercentage.ToString("F1")%
+                    </h3>
+                    <small class="text-muted">Uptime (24h)</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card h-100 text-center">
+                <div class="card-body">
+                    <h3>@_healthSummary.AverageResponseTimeMs.ToString("F0")<small class="fs-6">ms</small></h3>
+                    <small class="text-muted">Avg Response</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card h-100 text-center">
+                <div class="card-body">
+                    <h3 class="text-success">@_healthSummary.SuccessfulChecks</h3>
+                    <small class="text-muted">Successful Checks</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card h-100 text-center">
+                <div class="card-body">
+                    <h3 class="@(_healthSummary.FailedChecks > 0 ? "text-danger" : "text-success")">@_healthSummary.FailedChecks</h3>
+                    <small class="text-muted">Failed Checks</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Current Status & Details -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Current Status</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            <tr>
+                                <td class="fw-bold">Status</td>
+                                <td>
+                                    @if (_app.LastChecked.HasValue)
+                                    {
+                                        <span class="badge @(_app.IsResponding ? "bg-success" : "bg-danger")">
+                                            @(_app.HttpStatusCode?.ToString() ?? (_app.IsResponding ? "OK" : "Error"))
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Pending first check</span>
+                                    }
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Response Time</td>
+                                <td>@(_app.ResponseTimeMs > 0 ? $"{_app.ResponseTimeMs}ms" : "--")</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Last Checked</td>
+                                <td>@(_app.LastChecked?.ToString("yyyy-MM-dd HH:mm:ss") ?? "--")</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Physical Path</td>
+                                <td><code class="small">@_app.PhysicalPath</code></td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Protocols</td>
+                                <td>@_app.EnabledProtocols</td>
+                            </tr>
+                            @if (_healthSummary.LastDowntime.HasValue)
+                            {
+                                <tr>
+                                    <td class="fw-bold">Last Downtime</td>
+                                    <td class="text-danger">@_healthSummary.LastDowntime.Value.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+
+                    @if (!string.IsNullOrEmpty(_app.ErrorMessage))
+                    {
+                        <div class="alert alert-danger mt-3 mb-0">
+                            <h6 class="alert-heading"><i class="bi bi-exclamation-triangle me-2"></i>Current Error</h6>
+                            <pre class="mb-0 small" style="white-space: pre-wrap;">@_app.ErrorMessage</pre>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Errors -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Recent Errors</h5>
+                </div>
+                <div class="card-body p-0">
+                    @if (_healthSummary.RecentErrors.Count > 0)
+                    {
+                        <div class="list-group list-group-flush">
+                            @foreach (var error in _healthSummary.RecentErrors)
+                            {
+                                <div class="list-group-item">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <span class="badge bg-danger me-2">@(error.HttpStatusCode?.ToString() ?? "Error")</span>
+                                        <small class="text-muted">@error.Timestamp.ToString("MM/dd HH:mm:ss")</small>
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(error.ErrorMessage))
+                                    {
+                                        <small class="text-muted d-block mt-1" style="word-break: break-word;">
+                                            @(error.ErrorMessage.Length > 200 ? error.ErrorMessage[..200] + "..." : error.ErrorMessage)
+                                        </small>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center py-4 text-muted">
+                            <i class="bi bi-check-circle display-4 text-success"></i>
+                            <p class="mt-2">No errors recorded</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Response Time History -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Status History</h5>
+        </div>
+        <div class="card-body">
+            @if (_history.Count > 0)
+            {
+                <!-- Simple visual timeline -->
+                <div class="mb-3">
+                    <div class="d-flex flex-wrap" style="gap: 2px;">
+                        @foreach (var entry in _history.Take(50))
+                        {
+                            <div class="@(entry.IsResponding ? "bg-success" : "bg-danger")"
+                                 style="width: 20px; height: 30px; border-radius: 3px;"
+                                 title="@entry.Timestamp.ToString("HH:mm:ss") - @(entry.IsResponding ? $"OK ({entry.ResponseTimeMs}ms)" : entry.ErrorMessage ?? "Error")">
+                            </div>
+                        }
+                    </div>
+                    <small class="text-muted">Last @Math.Min(50, _history.Count) checks (newest first)</small>
+                </div>
+
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>Time</th>
+                                <th>Status</th>
+                                <th>Response</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var entry in _history)
+                            {
+                                <tr class="@(!entry.IsResponding ? "table-danger" : "")">
+                                    <td><small>@entry.Timestamp.ToString("MM/dd HH:mm:ss")</small></td>
+                                    <td>
+                                        <span class="badge @(entry.IsResponding ? "bg-success" : "bg-danger")">
+                                            @(entry.HttpStatusCode?.ToString() ?? (entry.IsResponding ? "OK" : "Error"))
+                                        </span>
+                                    </td>
+                                    <td>@(entry.ResponseTimeMs > 0 ? $"{entry.ResponseTimeMs}ms" : "--")</td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(entry.ErrorMessage))
+                                        {
+                                            <small class="text-danger" title="@entry.ErrorMessage">
+                                                @(entry.ErrorMessage.Length > 50 ? entry.ErrorMessage[..50] + "..." : entry.ErrorMessage)
+                                            </small>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="text-center py-4 text-muted">
+                    <p>No history recorded yet. Data will appear after the first health check.</p>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="mt-3">
+        <button class="btn btn-primary" @onclick="RefreshData" disabled="@_isLoading">
+            <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+        </button>
+        <a href="/applications" class="btn btn-outline-secondary ms-2">
+            <i class="bi bi-arrow-left me-1"></i>Back to Applications
+        </a>
+    </div>
+}
+
+@code {
+    [Parameter] public string SiteName { get; set; } = string.Empty;
+    [Parameter] public string AppPath { get; set; } = string.Empty;
+
+    private ApplicationInfo? _app;
+    private List<StatusHistoryEntry> _history = new();
+    private HealthSummary _healthSummary = new();
+    private bool _isLoading;
+
+    protected override void OnInitialized()
+    {
+        RefreshData();
+    }
+
+    protected override void OnParametersSet()
+    {
+        RefreshData();
+    }
+
+    private void RefreshData()
+    {
+        _isLoading = true;
+
+        var decodedSiteName = Uri.UnescapeDataString(SiteName);
+        var decodedAppPath = "/" + Uri.UnescapeDataString(AppPath ?? "").TrimStart('/');
+
+        _app = IISMonitor.GetApplication(decodedSiteName, decodedAppPath);
+
+        if (_app != null)
+        {
+            _history = IISMonitor.GetAppHistory(decodedSiteName, decodedAppPath);
+            _healthSummary = IISMonitor.GetAppHealthSummary(decodedSiteName, decodedAppPath);
+        }
+
+        _isLoading = false;
+    }
+}

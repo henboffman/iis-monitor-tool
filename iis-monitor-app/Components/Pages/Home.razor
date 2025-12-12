@@ -1,6 +1,7 @@
 @page "/"
 @inject IISMonitorService IISMonitor
 @inject EventLogService EventLog
+@inject NavigationManager Navigation
 @rendermode InteractiveServer
 
 <PageTitle>IIS Monitor - Overview</PageTitle>
@@ -79,17 +80,21 @@
                         <tbody>
                             @foreach (var app in _apps.OrderByDescending(a => !a.IsResponding && a.LastChecked.HasValue).Take(10))
                             {
-                                <tr class="@(!app.IsResponding && app.LastChecked.HasValue ? "table-danger" : "")">
+                                <tr class="@(!app.IsResponding && app.LastChecked.HasValue ? "table-danger" : "")" style="cursor: pointer;" @onclick="() => NavigateToApp(app)">
                                     <td>
-                                        <strong>@app.Path</strong>
+                                        <a href="/applications/@Uri.EscapeDataString(app.SiteName)@app.Path" class="text-decoration-none">
+                                            <strong>@app.Path</strong>
+                                        </a>
                                     </td>
                                     <td>
-                                        <small>@app.SiteName</small>
+                                        <a href="/sites/@Uri.EscapeDataString(app.SiteName)" class="text-decoration-none text-muted" @onclick:stopPropagation="true">
+                                            <small>@app.SiteName</small>
+                                        </a>
                                     </td>
                                     <td>
                                         @if (app.LastChecked.HasValue)
                                         {
-                                            <span class="badge @(app.IsResponding ? "bg-success" : "bg-danger")">
+                                            <span class="badge @(app.IsResponding ? "bg-success" : "bg-danger")" title="@app.ErrorMessage">
                                                 @(app.HttpStatusCode?.ToString() ?? (app.IsResponding ? "OK" : "Error"))
                                             </span>
                                         }
@@ -232,5 +237,10 @@
         if (unhealthyCount > 0) return "text-danger";
         if (_apps.Count == 0) return "text-secondary";
         return "text-success";
+    }
+
+    private void NavigateToApp(ApplicationInfo app)
+    {
+        Navigation.NavigateTo($"/applications/{Uri.EscapeDataString(app.SiteName)}{app.Path}");
     }
 }

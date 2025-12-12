@@ -8,6 +8,9 @@ public class IISMonitorService
     private readonly ILogger<IISMonitorService> _logger;
     private readonly ConcurrentDictionary<string, SiteStatus> _siteStatuses = new();
     private readonly ConcurrentDictionary<string, AppStatus> _appStatuses = new();
+    private readonly ConcurrentDictionary<string, List<StatusHistoryEntry>> _siteHistory = new();
+    private readonly ConcurrentDictionary<string, List<StatusHistoryEntry>> _appHistory = new();
+    private const int MaxHistoryEntries = 100; // Keep last 100 checks per site/app
 
     public IISMonitorService(ILogger<IISMonitorService> logger)
     {
@@ -62,6 +65,7 @@ public class IISMonitorService
                         appInfo.IsResponding = appStatus.IsResponding;
                         appInfo.ResponseTimeMs = appStatus.ResponseTimeMs;
                         appInfo.HttpStatusCode = appStatus.HttpStatusCode;
+                        appInfo.ErrorMessage = appStatus.ErrorMessage;
                     }
 
                     siteInfo.Applications.Add(appInfo);
@@ -189,26 +193,133 @@ public class IISMonitorService
         return differences;
     }
 
-    public void UpdateSiteStatus(string siteName, bool isResponding, long responseTimeMs, int? httpStatusCode = null)
+    public void UpdateSiteStatus(string siteName, bool isResponding, long responseTimeMs, int? httpStatusCode = null, string? errorMessage = null)
     {
+        var timestamp = DateTime.UtcNow;
+
         _siteStatuses[siteName] = new SiteStatus
         {
             IsResponding = isResponding,
             ResponseTimeMs = responseTimeMs,
             HttpStatusCode = httpStatusCode,
-            LastChecked = DateTime.UtcNow
+            ErrorMessage = errorMessage,
+            LastChecked = timestamp
         };
+
+        // Add to history
+        AddToHistory(_siteHistory, siteName, new StatusHistoryEntry
+        {
+            Timestamp = timestamp,
+            IsResponding = isResponding,
+            ResponseTimeMs = responseTimeMs,
+            HttpStatusCode = httpStatusCode,
+            ErrorMessage = errorMessage
+        });
     }
 
-    public void UpdateAppStatus(string siteName, string appPath, bool isResponding, long responseTimeMs, int? httpStatusCode = null)
+    public void UpdateAppStatus(string siteName, string appPath, bool isResponding, long responseTimeMs, int? httpStatusCode = null, string? errorMessage = null)
     {
         var appKey = $"{siteName}:{appPath}";
+        var timestamp = DateTime.UtcNow;
+
         _appStatuses[appKey] = new AppStatus
         {
             IsResponding = isResponding,
             ResponseTimeMs = responseTimeMs,
             HttpStatusCode = httpStatusCode,
-            LastChecked = DateTime.UtcNow
+            ErrorMessage = errorMessage,
+            LastChecked = timestamp
+        };
+
+        // Add to history
+        AddToHistory(_appHistory, appKey, new StatusHistoryEntry
+        {
+            Timestamp = timestamp,
+            IsResponding = isResponding,
+            ResponseTimeMs = responseTimeMs,
+            HttpStatusCode = httpStatusCode,
+            ErrorMessage = errorMessage
+        });
+    }
+
+    private void AddToHistory(ConcurrentDictionary<string, List<StatusHistoryEntry>> history, string key, StatusHistoryEntry entry)
+    {
+        history.AddOrUpdate(key,
+            _ => new List<StatusHistoryEntry> { entry },
+            (_, list) =>
+            {
+                lock (list)
+                {
+                    list.Add(entry);
+                    // Keep only the last N entries
+                    if (list.Count > MaxHistoryEntries)
+                    {
+                        list.RemoveAt(0);
+                    }
+                }
+                return list;
+            });
+    }
+
+    public List<StatusHistoryEntry> GetSiteHistory(string siteName)
+    {
+        return _siteHistory.TryGetValue(siteName, out var history)
+            ? history.OrderByDescending(h => h.Timestamp).ToList()
+            : new List<StatusHistoryEntry>();
+    }
+
+    public List<StatusHistoryEntry> GetAppHistory(string siteName, string appPath)
+    {
+        var appKey = $"{siteName}:{appPath}";
+        return _appHistory.TryGetValue(appKey, out var history)
+            ? history.OrderByDescending(h => h.Timestamp).ToList()
+            : new List<StatusHistoryEntry>();
+    }
+
+    public SiteInfo? GetSiteByName(string siteName)
+    {
+        return GetAllSites().FirstOrDefault(s => s.Name.Equals(siteName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public ApplicationInfo? GetApplication(string siteName, string appPath)
+    {
+        return GetAllApplications().FirstOrDefault(a =>
+            a.SiteName.Equals(siteName, StringComparison.OrdinalIgnoreCase) &&
+            a.Path.Equals(appPath, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public HealthSummary GetSiteHealthSummary(string siteName)
+    {
+        var history = GetSiteHistory(siteName);
+        return CalculateHealthSummary(history);
+    }
+
+    public HealthSummary GetAppHealthSummary(string siteName, string appPath)
+    {
+        var history = GetAppHistory(siteName, appPath);
+        return CalculateHealthSummary(history);
+    }
+
+    private HealthSummary CalculateHealthSummary(List<StatusHistoryEntry> history)
+    {
+        if (history.Count == 0)
+        {
+            return new HealthSummary();
+        }
+
+        var last24Hours = history.Where(h => h.Timestamp > DateTime.UtcNow.AddHours(-24)).ToList();
+        var successCount = last24Hours.Count(h => h.IsResponding);
+        var totalCount = last24Hours.Count;
+
+        return new HealthSummary
+        {
+            UptimePercentage = totalCount > 0 ? (double)successCount / totalCount * 100 : 0,
+            TotalChecks = totalCount,
+            SuccessfulChecks = successCount,
+            FailedChecks = totalCount - successCount,
+            AverageResponseTimeMs = last24Hours.Where(h => h.IsResponding && h.ResponseTimeMs > 0).Select(h => h.ResponseTimeMs).DefaultIfEmpty(0).Average(),
+            LastDowntime = history.Where(h => !h.IsResponding).OrderByDescending(h => h.Timestamp).FirstOrDefault()?.Timestamp,
+            RecentErrors = history.Where(h => !h.IsResponding).Take(10).ToList()
         };
     }
 
@@ -280,6 +391,7 @@ public class ApplicationInfo
     public bool IsResponding { get; set; }
     public long ResponseTimeMs { get; set; }
     public int? HttpStatusCode { get; set; }
+    public string? ErrorMessage { get; set; }
 }
 
 public class AppPoolInfo
@@ -322,6 +434,7 @@ public class SiteStatus
     public bool IsResponding { get; set; }
     public long ResponseTimeMs { get; set; }
     public int? HttpStatusCode { get; set; }
+    public string? ErrorMessage { get; set; }
     public DateTime LastChecked { get; set; }
 }
 
@@ -330,7 +443,28 @@ public class AppStatus
     public bool IsResponding { get; set; }
     public long ResponseTimeMs { get; set; }
     public int? HttpStatusCode { get; set; }
+    public string? ErrorMessage { get; set; }
     public DateTime LastChecked { get; set; }
+}
+
+public class StatusHistoryEntry
+{
+    public DateTime Timestamp { get; set; }
+    public bool IsResponding { get; set; }
+    public long ResponseTimeMs { get; set; }
+    public int? HttpStatusCode { get; set; }
+    public string? ErrorMessage { get; set; }
+}
+
+public class HealthSummary
+{
+    public double UptimePercentage { get; set; }
+    public int TotalChecks { get; set; }
+    public int SuccessfulChecks { get; set; }
+    public int FailedChecks { get; set; }
+    public double AverageResponseTimeMs { get; set; }
+    public DateTime? LastDowntime { get; set; }
+    public List<StatusHistoryEntry> RecentErrors { get; set; } = new();
 }
 
 public class ConfigDifference

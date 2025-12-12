@@ -52,22 +52,22 @@ public class MonitorBackgroundService : BackgroundService
             if (string.IsNullOrEmpty(baseUrl)) continue;
 
             // Check root site
-            await CheckEndpointAsync(baseUrl, (isResponding, responseTime, statusCode) =>
-                _iisMonitor.UpdateSiteStatus(site.Name, isResponding, responseTime, statusCode),
+            await CheckEndpointAsync(baseUrl, (isResponding, responseTime, statusCode, errorMessage) =>
+                _iisMonitor.UpdateSiteStatus(site.Name, isResponding, responseTime, statusCode, errorMessage),
                 site.Name);
 
             // Check all applications (subsites)
             foreach (var app in site.Applications)
             {
                 var appUrl = baseUrl.TrimEnd('/') + app.Path;
-                await CheckEndpointAsync(appUrl, (isResponding, responseTime, statusCode) =>
-                    _iisMonitor.UpdateAppStatus(site.Name, app.Path, isResponding, responseTime, statusCode),
+                await CheckEndpointAsync(appUrl, (isResponding, responseTime, statusCode, errorMessage) =>
+                    _iisMonitor.UpdateAppStatus(site.Name, app.Path, isResponding, responseTime, statusCode, errorMessage),
                     $"{site.Name}{app.Path}");
             }
         }
     }
 
-    private async Task CheckEndpointAsync(string url, Action<bool, long, int?> updateStatus, string name)
+    private async Task CheckEndpointAsync(string url, Action<bool, long, int?, string?> updateStatus, string name)
     {
         try
         {
@@ -75,12 +75,38 @@ public class MonitorBackgroundService : BackgroundService
             var response = await _httpClient.GetAsync(url);
             sw.Stop();
 
-            updateStatus(response.IsSuccessStatusCode, sw.ElapsedMilliseconds, (int)response.StatusCode);
+            string? errorMessage = null;
+            if (!response.IsSuccessStatusCode)
+            {
+                errorMessage = $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}";
+                // Try to get response body for more details (limited to 500 chars)
+                try
+                {
+                    var body = await response.Content.ReadAsStringAsync();
+                    if (!string.IsNullOrWhiteSpace(body))
+                    {
+                        errorMessage += $": {(body.Length > 500 ? body[..500] + "..." : body)}";
+                    }
+                }
+                catch { }
+            }
+
+            updateStatus(response.IsSuccessStatusCode, sw.ElapsedMilliseconds, (int)response.StatusCode, errorMessage);
+        }
+        catch (TaskCanceledException)
+        {
+            _logger.LogWarning("Health check timed out for {Name}", name);
+            updateStatus(false, 0, null, "Request timed out after 10 seconds");
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning("Health check failed for {Name}: {Error}", name, ex.Message);
+            updateStatus(false, 0, null, $"Connection failed: {ex.Message}");
         }
         catch (Exception ex)
         {
             _logger.LogWarning("Health check failed for {Name}: {Error}", name, ex.Message);
-            updateStatus(false, 0, null);
+            updateStatus(false, 0, null, $"Error: {ex.Message}");
         }
     }
 

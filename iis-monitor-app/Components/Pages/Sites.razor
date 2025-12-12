@@ -1,5 +1,6 @@
 @page "/sites"
 @inject IISMonitorService IISMonitor
+@inject NavigationManager Navigation
 @rendermode InteractiveServer
 
 <PageTitle>IIS Monitor - Sites</PageTitle>
@@ -22,13 +23,15 @@
         <tbody>
             @foreach (var site in _sites)
             {
-                <tr class="@(site.State != "Started" ? "table-warning" : "")">
+                <tr class="@(site.State != "Started" ? "table-warning" : "")" style="cursor: pointer;" @onclick="() => NavigateToSite(site.Name)">
                     <td>@site.Id</td>
                     <td>
-                        <strong>@site.Name</strong>
+                        <a href="/sites/@Uri.EscapeDataString(site.Name)" class="text-decoration-none">
+                            <strong>@site.Name</strong>
+                        </a>
                         @if (site.Applications.Count > 0)
                         {
-                            <button class="btn btn-sm btn-link p-0 ms-2" @onclick="() => ToggleApps(site.Name)">
+                            <button class="btn btn-sm btn-link p-0 ms-2" @onclick="() => ToggleApps(site.Name)" @onclick:stopPropagation="true">
                                 <i class="bi @(_expandedSites.Contains(site.Name) ? "bi-chevron-up" : "bi-chevron-down")"></i>
                                 @site.Applications.Count apps
                             </button>
@@ -65,17 +68,33 @@
                 {
                     foreach (var app in site.Applications)
                     {
-                        <tr class="table-light">
+                        <tr class="table-light @(!app.IsResponding && app.LastChecked.HasValue ? "table-danger" : "")" style="cursor: pointer;" @onclick="() => NavigateToApp(site.Name, app.Path)">
                             <td></td>
                             <td class="ps-4">
                                 <i class="bi bi-arrow-return-right me-2 text-muted"></i>
-                                @app.Path
+                                <a href="/applications/@Uri.EscapeDataString(site.Name)@app.Path" class="text-decoration-none">@app.Path</a>
                             </td>
-                            <td><span class="badge bg-info">Sub-app</span></td>
+                            <td>
+                                @if (app.LastChecked.HasValue)
+                                {
+                                    <span class="badge @(app.IsResponding ? "bg-success" : "bg-danger")">
+                                        @(app.HttpStatusCode?.ToString() ?? (app.IsResponding ? "OK" : "Error"))
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">Pending</span>
+                                }
+                            </td>
                             <td><small>@app.EnabledProtocols</small></td>
                             <td><code>@app.AppPoolName</code></td>
                             <td><small class="text-muted">@TruncatePath(app.PhysicalPath)</small></td>
-                            <td></td>
+                            <td>
+                                @if (app.LastChecked.HasValue && app.ResponseTimeMs > 0)
+                                {
+                                    <span class="@(app.IsResponding ? "text-success" : "text-danger")">@(app.ResponseTimeMs)ms</span>
+                                }
+                            </td>
                         </tr>
                     }
                 }
@@ -133,5 +152,15 @@
     {
         if (string.IsNullOrEmpty(path)) return "N/A";
         return path.Length > 50 ? "..." + path[^47..] : path;
+    }
+
+    private void NavigateToSite(string siteName)
+    {
+        Navigation.NavigateTo($"/sites/{Uri.EscapeDataString(siteName)}");
+    }
+
+    private void NavigateToApp(string siteName, string appPath)
+    {
+        Navigation.NavigateTo($"/applications/{Uri.EscapeDataString(siteName)}{appPath}");
     }
 }
