@@ -17,9 +17,11 @@ public class MonitorBackgroundService : BackgroundService
         _config = config;
 
         // Create HttpClient that accepts self-signed/invalid SSL certificates (common in dev/internal environments)
+        // and uses Windows credentials for Windows Authentication
         var handler = new HttpClientHandler
         {
-            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
+            UseDefaultCredentials = true
         };
         _httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
     }
