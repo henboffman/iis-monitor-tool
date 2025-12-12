@@ -1,0 +1,281 @@
+@page "/tasks"
+@inject ScheduledTaskService TaskService
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+
+<PageTitle>IIS Monitor - Scheduled Tasks</PageTitle>
+
+<h1 class="mb-4">Scheduled Tasks</h1>
+
+<div class="row mb-3">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3 class="text-primary">@_tasks.Count</h3>
+                <small class="text-muted">Total Tasks</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3 class="text-success">@_tasks.Count(t => t.State == "Running")</h3>
+                <small class="text-muted">Running</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3 class="text-warning">@_tasks.Count(t => t.State == "Disabled" || !t.Enabled)</h3>
+                <small class="text-muted">Disabled</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3 class="text-danger">@_tasks.Count(t => t.LastTaskResult != 0 && t.LastRunTime.HasValue)</h3>
+                <small class="text-muted">Last Run Failed</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Controls -->
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Folder Filter</label>
+                <select class="form-select" @bind="_selectedFolder">
+                    <option value="">All Folders</option>
+                    @foreach (var folder in _folders.OrderBy(f => f.Path))
+                    {
+                        <option value="@folder.Path">@folder.Path (@folder.TaskCount tasks)</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Status Filter</label>
+                <select class="form-select" @bind="_statusFilter">
+                    <option value="">All Statuses</option>
+                    <option value="Ready">Ready</option>
+                    <option value="Running">Running</option>
+                    <option value="Disabled">Disabled</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Search</label>
+                <input type="text" class="form-control" placeholder="Search task name..." @bind="_searchTerm" @bind:event="oninput" />
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>Task Name</th>
+                <th>Folder</th>
+                <th>Status</th>
+                <th>Last Run</th>
+                <th>Last Result</th>
+                <th>Next Run</th>
+                <th>Schedule</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var task in FilteredTasks)
+            {
+                <tr class="@GetRowClass(task)" style="cursor: pointer;" @onclick="() => NavigateToTask(task.Path)">
+                    <td>
+                        <a href="@($"tasks/{Uri.EscapeDataString(task.Path)}")" class="text-decoration-none" @onclick:stopPropagation="true">
+                            <strong>@task.Name</strong>
+                        </a>
+                        @if (!string.IsNullOrEmpty(task.Description))
+                        {
+                            <br />
+                            <small class="text-muted" title="@task.Description">
+                                @(task.Description.Length > 60 ? task.Description[..60] + "..." : task.Description)
+                            </small>
+                        }
+                    </td>
+                    <td><small class="text-muted">@task.FolderPath</small></td>
+                    <td>
+                        <span class="badge @GetStateBadgeClass(task)">
+                            @task.State
+                        </span>
+                        @if (!task.Enabled)
+                        {
+                            <span class="badge bg-secondary ms-1">Disabled</span>
+                        }
+                    </td>
+                    <td>
+                        @if (task.LastRunTime.HasValue)
+                        {
+                            <small>@FormatTimeShort(task.LastRunTime.Value)</small>
+                        }
+                        else
+                        {
+                            <small class="text-muted">Never</small>
+                        }
+                    </td>
+                    <td>
+                        @if (task.LastRunTime.HasValue)
+                        {
+                            <span class="badge @(task.LastTaskResult == 0 ? "bg-success" : "bg-danger")" title="@task.LastTaskResultMessage">
+                                @(task.LastTaskResult == 0 ? "Success" : $"0x{task.LastTaskResult:X}")
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="text-muted">--</span>
+                        }
+                    </td>
+                    <td>
+                        @if (task.NextRunTime.HasValue)
+                        {
+                            <small>@FormatTimeShort(task.NextRunTime.Value)</small>
+                        }
+                        else
+                        {
+                            <small class="text-muted">Not scheduled</small>
+                        }
+                    </td>
+                    <td>
+                        @if (task.Triggers.Count > 0)
+                        {
+                            var trigger = task.Triggers.FirstOrDefault(t => t.Enabled);
+                            if (trigger != null)
+                            {
+                                <small title="@trigger.Description">@TruncateSchedule(trigger.Description)</small>
+                            }
+                            else
+                            {
+                                <small class="text-muted">No active triggers</small>
+                            }
+                        }
+                        else
+                        {
+                            <small class="text-muted">No triggers</small>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (FilteredTasks.Count() == 0)
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>
+        @if (_tasks.Count == 0)
+        {
+            <span>No scheduled tasks found. This may require elevated privileges to read.</span>
+        }
+        else
+        {
+            <span>No tasks match your filter criteria.</span>
+        }
+    </div>
+}
+
+<div class="mt-3">
+    <button class="btn btn-primary" @onclick="RefreshData" disabled="@_isLoading">
+        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+    </button>
+</div>
+
+@code {
+    private List<ScheduledTaskInfo> _tasks = new();
+    private List<TaskFolderInfo> _folders = new();
+    private bool _isLoading;
+    private string _selectedFolder = "";
+    private string _statusFilter = "";
+    private string _searchTerm = "";
+    private static readonly TimeZoneInfo _easternZone = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
+
+    protected override void OnInitialized()
+    {
+        RefreshData();
+    }
+
+    private void RefreshData()
+    {
+        _isLoading = true;
+        _tasks = TaskService.GetAllTasks();
+        _folders = TaskService.GetTaskFolders();
+        _isLoading = false;
+    }
+
+    private IEnumerable<ScheduledTaskInfo> FilteredTasks
+    {
+        get
+        {
+            var filtered = _tasks.AsEnumerable();
+
+            if (!string.IsNullOrEmpty(_selectedFolder))
+            {
+                filtered = filtered.Where(t => t.FolderPath == _selectedFolder);
+            }
+
+            if (!string.IsNullOrEmpty(_statusFilter))
+            {
+                filtered = filtered.Where(t => t.State == _statusFilter ||
+                    (_statusFilter == "Disabled" && !t.Enabled));
+            }
+
+            if (!string.IsNullOrEmpty(_searchTerm))
+            {
+                filtered = filtered.Where(t =>
+                    t.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    t.Description.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
+            }
+
+            return filtered.OrderBy(t => t.FolderPath).ThenBy(t => t.Name);
+        }
+    }
+
+    private string GetRowClass(ScheduledTaskInfo task)
+    {
+        if (!task.Enabled) return "table-secondary";
+        if (task.LastRunTime.HasValue && task.LastTaskResult != 0) return "table-danger";
+        if (task.State == "Running") return "table-info";
+        return "";
+    }
+
+    private string GetStateBadgeClass(ScheduledTaskInfo task)
+    {
+        return task.State switch
+        {
+            "Ready" => "bg-success",
+            "Running" => "bg-primary",
+            "Disabled" => "bg-secondary",
+            "Queued" => "bg-info",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string TruncateSchedule(string schedule)
+    {
+        if (string.IsNullOrEmpty(schedule)) return "N/A";
+        return schedule.Length > 30 ? schedule[..30] + "..." : schedule;
+    }
+
+    private void NavigateToTask(string taskPath)
+    {
+        Navigation.NavigateTo($"tasks/{Uri.EscapeDataString(taskPath)}");
+    }
+
+    private string FormatTimeShort(DateTime localTime)
+    {
+        var eastern = localTime.Kind == DateTimeKind.Utc
+            ? TimeZoneInfo.ConvertTimeFromUtc(localTime, _easternZone)
+            : TimeZoneInfo.ConvertTime(localTime, _easternZone);
+        var offset = _easternZone.IsDaylightSavingTime(eastern) ? "EDT" : "EST";
+        return $"{eastern:MM/dd HH:mm} {offset}";
+    }
+}

@@ -1,0 +1,449 @@
+@page "/tasks/{*TaskPath}"
+@inject ScheduledTaskService TaskService
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+
+<PageTitle>IIS Monitor - @(_task?.Name ?? "Task")</PageTitle>
+
+@if (_task == null)
+{
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        Task not found. <a href="tasks">Return to Tasks</a>
+    </div>
+}
+else
+{
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="">Overview</a></li>
+            <li class="breadcrumb-item"><a href="tasks">Tasks</a></li>
+            <li class="breadcrumb-item active">@_task.Name</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="mb-0">@_task.Name</h1>
+            <small class="text-muted">@_task.Path</small>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <button class="btn btn-outline-primary" @onclick="RefreshData" disabled="@_isLoading">
+                <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+            </button>
+            <span class="badge fs-5 @GetStateBadgeClass(_task)">
+                @_task.State
+            </span>
+            @if (!_task.Enabled)
+            {
+                <span class="badge fs-5 bg-secondary">Disabled</span>
+            }
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="card h-100 text-center">
+                <div class="card-body">
+                    <h3 class="@(_task.LastTaskResult == 0 ? "text-success" : "text-danger")">
+                        @(_task.LastTaskResult == 0 ? "Success" : "Failed")
+                    </h3>
+                    <small class="text-muted">Last Result</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card h-100 text-center">
+                <div class="card-body">
+                    <h3>@_runHistory.Count(r => r.ResultCode == 0)</h3>
+                    <small class="text-muted">Successful Runs</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card h-100 text-center">
+                <div class="card-body">
+                    <h3 class="@(_runHistory.Count(r => r.ResultCode != 0) > 0 ? "text-danger" : "text-success")">@_runHistory.Count(r => r.ResultCode != 0)</h3>
+                    <small class="text-muted">Failed Runs</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card h-100 text-center">
+                <div class="card-body">
+                    <h3>@_task.Triggers.Count(t => t.Enabled)</h3>
+                    <small class="text-muted">Active Triggers</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Task Details -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Task Details</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            <tr>
+                                <td class="fw-bold">Status</td>
+                                <td>
+                                    <span class="badge @GetStateBadgeClass(_task)">@_task.State</span>
+                                    @if (!_task.Enabled)
+                                    {
+                                        <span class="badge bg-secondary ms-1">Disabled</span>
+                                    }
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Description</td>
+                                <td>@(string.IsNullOrEmpty(_task.Description) ? "--" : _task.Description)</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Author</td>
+                                <td>@(string.IsNullOrEmpty(_task.Author) ? "--" : _task.Author)</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Folder</td>
+                                <td><code>@_task.FolderPath</code></td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Last Run</td>
+                                <td>@(_task.LastRunTime.HasValue ? FormatTime(_task.LastRunTime.Value) : "Never")</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Last Result</td>
+                                <td>
+                                    <span class="badge @(_task.LastTaskResult == 0 ? "bg-success" : "bg-danger")">
+                                        @(_task.LastTaskResult == 0 ? "Success" : $"0x{_task.LastTaskResult:X}")
+                                    </span>
+                                    <small class="text-muted ms-2">@_task.LastTaskResultMessage</small>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Next Run</td>
+                                <td>@(_task.NextRunTime.HasValue ? FormatTime(_task.NextRunTime.Value) : "Not scheduled")</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Run As</td>
+                                <td>@_task.Principal.UserId (@_task.Principal.RunLevel)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-play-circle me-2"></i>Actions (@_task.Actions.Count)</h5>
+                </div>
+                <div class="card-body p-0">
+                    @if (_task.Actions.Count > 0)
+                    {
+                        <div class="list-group list-group-flush">
+                            @foreach (var action in _task.Actions)
+                            {
+                                <div class="list-group-item">
+                                    <div class="d-flex justify-content-between">
+                                        <span class="badge bg-info">@action.Type</span>
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(action.Path))
+                                    {
+                                        <div class="mt-2">
+                                            <strong>Program:</strong><br />
+                                            <code class="small">@action.Path</code>
+                                        </div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(action.Arguments))
+                                    {
+                                        <div class="mt-2">
+                                            <strong>Arguments:</strong><br />
+                                            <code class="small" style="word-break: break-all;">@action.Arguments</code>
+                                        </div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(action.WorkingDirectory))
+                                    {
+                                        <div class="mt-2">
+                                            <strong>Start in:</strong><br />
+                                            <code class="small">@action.WorkingDirectory</code>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center py-4 text-muted">
+                            <p>No actions defined</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Triggers -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-clock me-2"></i>Triggers (@_task.Triggers.Count)</h5>
+                </div>
+                <div class="card-body p-0">
+                    @if (_task.Triggers.Count > 0)
+                    {
+                        <div class="list-group list-group-flush">
+                            @foreach (var trigger in _task.Triggers)
+                            {
+                                <div class="list-group-item @(!trigger.Enabled ? "list-group-item-secondary" : "")">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <span class="badge @(trigger.Enabled ? "bg-primary" : "bg-secondary")">@trigger.Type</span>
+                                        @if (!trigger.Enabled)
+                                        {
+                                            <small class="text-muted">Disabled</small>
+                                        }
+                                    </div>
+                                    <div class="mt-2">
+                                        <small>@trigger.Description</small>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center py-4 text-muted">
+                            <p>No triggers defined</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-gear me-2"></i>Settings</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            <tr>
+                                <td class="fw-bold">Allow on demand</td>
+                                <td>@(_task.Settings.AllowDemandStart ? "Yes" : "No")</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Stop on batteries</td>
+                                <td>@(_task.Settings.StopIfGoingOnBatteries ? "Yes" : "No")</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Run only if network</td>
+                                <td>@(_task.Settings.RunOnlyIfNetworkAvailable ? "Yes" : "No")</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Run only if idle</td>
+                                <td>@(_task.Settings.RunOnlyIfIdle ? "Yes" : "No")</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Hidden</td>
+                                <td>@(_task.Settings.Hidden ? "Yes" : "No")</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Priority</td>
+                                <td>@_task.Settings.Priority</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Multiple instances</td>
+                                <td>@_task.Settings.MultipleInstances</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Run History -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Run History</h5>
+        </div>
+        <div class="card-body">
+            @if (_runHistory.Count > 0)
+            {
+                <!-- Simple visual timeline -->
+                <div class="mb-3">
+                    <div class="d-flex flex-wrap" style="gap: 2px;">
+                        @foreach (var run in _runHistory.Take(50))
+                        {
+                            <div class="@(run.ResultCode == 0 ? "bg-success" : "bg-danger")"
+                                 style="width: 20px; height: 30px; border-radius: 3px;"
+                                 title="@FormatTimeShort(run.StartTime) - @(run.ResultCode == 0 ? "Success" : run.ResultMessage)">
+                            </div>
+                        }
+                    </div>
+                    <small class="text-muted">Last @Math.Min(50, _runHistory.Count) runs (newest first)</small>
+                </div>
+
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>Start Time</th>
+                                <th>End Time</th>
+                                <th>Duration</th>
+                                <th>Result</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var run in _runHistory)
+                            {
+                                <tr class="@(run.ResultCode != 0 ? "table-danger" : "")">
+                                    <td><small>@FormatTimeShort(run.StartTime)</small></td>
+                                    <td><small>@(run.EndTime.HasValue ? FormatTimeShort(run.EndTime.Value) : "--")</small></td>
+                                    <td>
+                                        @if (run.Duration.HasValue)
+                                        {
+                                            <small>@FormatDuration(run.Duration.Value)</small>
+                                        }
+                                        else if (run.EndTime == null)
+                                        {
+                                            <small class="text-info">Running...</small>
+                                        }
+                                        else
+                                        {
+                                            <small>--</small>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="badge @(run.ResultCode == 0 ? "bg-success" : "bg-danger")">
+                                            @(run.ResultCode == 0 ? "Success" : $"0x{run.ResultCode:X}")
+                                        </span>
+                                    </td>
+                                    <td>
+                                        @if (run.ResultCode != 0)
+                                        {
+                                            <small class="text-danger" title="@run.ResultMessage">
+                                                @(run.ResultMessage.Length > 50 ? run.ResultMessage[..50] + "..." : run.ResultMessage)
+                                            </small>
+                                        }
+                                        else if (!string.IsNullOrEmpty(run.TriggeredBy))
+                                        {
+                                            <small class="text-muted">@run.TriggeredBy</small>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="text-center py-4 text-muted">
+                    <p>No run history available. This may require elevated privileges to read.</p>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="mt-3">
+        <button class="btn btn-primary" @onclick="RefreshData" disabled="@_isLoading">
+            <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+        </button>
+        <a href="tasks" class="btn btn-outline-secondary ms-2">
+            <i class="bi bi-arrow-left me-1"></i>Back to Tasks
+        </a>
+    </div>
+}
+
+@code {
+    [Parameter] public string TaskPath { get; set; } = string.Empty;
+
+    private ScheduledTaskInfo? _task;
+    private List<TaskRunInfo> _runHistory = new();
+    private bool _isLoading;
+    private static readonly TimeZoneInfo _easternZone = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
+
+    protected override void OnInitialized()
+    {
+        RefreshData();
+    }
+
+    protected override void OnParametersSet()
+    {
+        RefreshData();
+    }
+
+    private void RefreshData()
+    {
+        _isLoading = true;
+
+        var decodedPath = Uri.UnescapeDataString(TaskPath);
+        // Ensure path starts with backslash
+        if (!decodedPath.StartsWith("\\"))
+        {
+            decodedPath = "\\" + decodedPath;
+        }
+
+        _task = TaskService.GetTaskByPath(decodedPath);
+
+        if (_task != null)
+        {
+            _runHistory = TaskService.GetTaskRunHistory(decodedPath);
+        }
+
+        _isLoading = false;
+    }
+
+    private string GetStateBadgeClass(ScheduledTaskInfo task)
+    {
+        return task.State switch
+        {
+            "Ready" => "bg-success",
+            "Running" => "bg-primary",
+            "Disabled" => "bg-secondary",
+            "Queued" => "bg-info",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string FormatTime(DateTime localTime)
+    {
+        var eastern = localTime.Kind == DateTimeKind.Utc
+            ? TimeZoneInfo.ConvertTimeFromUtc(localTime, _easternZone)
+            : TimeZoneInfo.ConvertTime(localTime, _easternZone);
+        var offset = _easternZone.IsDaylightSavingTime(eastern) ? "EDT" : "EST";
+        return $"{eastern:yyyy-MM-dd HH:mm:ss} {offset}";
+    }
+
+    private string FormatTimeShort(DateTime localTime)
+    {
+        var eastern = localTime.Kind == DateTimeKind.Utc
+            ? TimeZoneInfo.ConvertTimeFromUtc(localTime, _easternZone)
+            : TimeZoneInfo.ConvertTime(localTime, _easternZone);
+        var offset = _easternZone.IsDaylightSavingTime(eastern) ? "EDT" : "EST";
+        return $"{eastern:MM/dd HH:mm:ss} {offset}";
+    }
+
+    private string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalDays >= 1)
+            return $"{duration.Days}d {duration.Hours}h {duration.Minutes}m";
+        if (duration.TotalHours >= 1)
+            return $"{duration.Hours}h {duration.Minutes}m {duration.Seconds}s";
+        if (duration.TotalMinutes >= 1)
+            return $"{duration.Minutes}m {duration.Seconds}s";
+        return $"{duration.TotalSeconds:F1}s";
+    }
+}

@@ -9,6 +9,7 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddSingleton<IISMonitorService>();
 builder.Services.AddSingleton<EventLogService>();
+builder.Services.AddSingleton<ScheduledTaskService>();
 builder.Services.AddHostedService<MonitorBackgroundService>();
 
 var app = builder.Build();

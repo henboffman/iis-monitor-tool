@@ -11,6 +11,8 @@
     <PackageReference Include="Microsoft.Web.Administration" Version="11.1.0" />
     <!-- Windows Event Log -->
     <PackageReference Include="System.Diagnostics.EventLog" Version="9.0.0" />
+    <!-- Windows Task Scheduler -->
+    <PackageReference Include="TaskScheduler" Version="2.11.0" />
   </ItemGroup>
 
 </Project>
