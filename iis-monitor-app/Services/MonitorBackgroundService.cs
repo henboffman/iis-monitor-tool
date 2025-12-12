@@ -45,27 +45,42 @@ public class MonitorBackgroundService : BackgroundService
 
         foreach (var site in sites.Where(s => s.State == "Started"))
         {
-            foreach (var binding in site.Bindings.Where(b => b.Protocol.StartsWith("http")))
+            var binding = site.Bindings.FirstOrDefault(b => b.Protocol.StartsWith("http"));
+            if (binding == null) continue;
+
+            var baseUrl = BuildUrl(binding);
+            if (string.IsNullOrEmpty(baseUrl)) continue;
+
+            // Check root site
+            await CheckEndpointAsync(baseUrl, (isResponding, responseTime, statusCode) =>
+                _iisMonitor.UpdateSiteStatus(site.Name, isResponding, responseTime, statusCode),
+                site.Name);
+
+            // Check all applications (subsites)
+            foreach (var app in site.Applications)
             {
-                try
-                {
-                    var url = BuildUrl(binding);
-                    if (string.IsNullOrEmpty(url)) continue;
-
-                    var sw = System.Diagnostics.Stopwatch.StartNew();
-                    var response = await _httpClient.GetAsync(url);
-                    sw.Stop();
-
-                    _iisMonitor.UpdateSiteStatus(site.Name, response.IsSuccessStatusCode, sw.ElapsedMilliseconds);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning("Health check failed for {Site}: {Error}", site.Name, ex.Message);
-                    _iisMonitor.UpdateSiteStatus(site.Name, false, 0);
-                }
-
-                break; // Only check first binding
+                var appUrl = baseUrl.TrimEnd('/') + app.Path;
+                await CheckEndpointAsync(appUrl, (isResponding, responseTime, statusCode) =>
+                    _iisMonitor.UpdateAppStatus(site.Name, app.Path, isResponding, responseTime, statusCode),
+                    $"{site.Name}{app.Path}");
             }
+        }
+    }
+
+    private async Task CheckEndpointAsync(string url, Action<bool, long, int?> updateStatus, string name)
+    {
+        try
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var response = await _httpClient.GetAsync(url);
+            sw.Stop();
+
+            updateStatus(response.IsSuccessStatusCode, sw.ElapsedMilliseconds, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("Health check failed for {Name}: {Error}", name, ex.Message);
+            updateStatus(false, 0, null);
         }
     }
 

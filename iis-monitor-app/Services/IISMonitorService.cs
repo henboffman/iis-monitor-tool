@@ -7,6 +7,7 @@ public class IISMonitorService
 {
     private readonly ILogger<IISMonitorService> _logger;
     private readonly ConcurrentDictionary<string, SiteStatus> _siteStatuses = new();
+    private readonly ConcurrentDictionary<string, AppStatus> _appStatuses = new();
 
     public IISMonitorService(ILogger<IISMonitorService> logger)
     {
@@ -44,13 +45,26 @@ public class IISMonitorService
                 {
                     if (app.Path == "/") continue; // Skip root app
 
-                    siteInfo.Applications.Add(new ApplicationInfo
+                    var appKey = $"{site.Name}:{app.Path}";
+                    var appInfo = new ApplicationInfo
                     {
                         Path = app.Path,
+                        SiteName = site.Name,
                         PhysicalPath = app.VirtualDirectories["/"]?.PhysicalPath ?? "N/A",
                         AppPoolName = app.ApplicationPoolName,
                         EnabledProtocols = app.EnabledProtocols
-                    });
+                    };
+
+                    // Get status from cache
+                    if (_appStatuses.TryGetValue(appKey, out var appStatus))
+                    {
+                        appInfo.LastChecked = appStatus.LastChecked;
+                        appInfo.IsResponding = appStatus.IsResponding;
+                        appInfo.ResponseTimeMs = appStatus.ResponseTimeMs;
+                        appInfo.HttpStatusCode = appStatus.HttpStatusCode;
+                    }
+
+                    siteInfo.Applications.Add(appInfo);
                 }
 
                 // Get status from cache
@@ -175,14 +189,46 @@ public class IISMonitorService
         return differences;
     }
 
-    public void UpdateSiteStatus(string siteName, bool isResponding, long responseTimeMs)
+    public void UpdateSiteStatus(string siteName, bool isResponding, long responseTimeMs, int? httpStatusCode = null)
     {
         _siteStatuses[siteName] = new SiteStatus
         {
             IsResponding = isResponding,
             ResponseTimeMs = responseTimeMs,
+            HttpStatusCode = httpStatusCode,
             LastChecked = DateTime.UtcNow
         };
+    }
+
+    public void UpdateAppStatus(string siteName, string appPath, bool isResponding, long responseTimeMs, int? httpStatusCode = null)
+    {
+        var appKey = $"{siteName}:{appPath}";
+        _appStatuses[appKey] = new AppStatus
+        {
+            IsResponding = isResponding,
+            ResponseTimeMs = responseTimeMs,
+            HttpStatusCode = httpStatusCode,
+            LastChecked = DateTime.UtcNow
+        };
+    }
+
+    public List<ApplicationInfo> GetAllApplications()
+    {
+        var apps = new List<ApplicationInfo>();
+        var sites = GetAllSites();
+
+        foreach (var site in sites)
+        {
+            foreach (var app in site.Applications)
+            {
+                // Copy site binding info to app for URL building
+                app.SiteBindings = site.Bindings;
+                app.SiteState = site.State;
+                apps.Add(app);
+            }
+        }
+
+        return apps;
     }
 
     private DateTime? GetProcessStartTime(int processId)
@@ -224,9 +270,16 @@ public class BindingInfo
 public class ApplicationInfo
 {
     public string Path { get; set; } = string.Empty;
+    public string SiteName { get; set; } = string.Empty;
+    public string SiteState { get; set; } = string.Empty;
     public string PhysicalPath { get; set; } = string.Empty;
     public string AppPoolName { get; set; } = string.Empty;
     public string EnabledProtocols { get; set; } = string.Empty;
+    public List<BindingInfo> SiteBindings { get; set; } = new();
+    public DateTime? LastChecked { get; set; }
+    public bool IsResponding { get; set; }
+    public long ResponseTimeMs { get; set; }
+    public int? HttpStatusCode { get; set; }
 }
 
 public class AppPoolInfo
@@ -268,6 +321,15 @@ public class SiteStatus
 {
     public bool IsResponding { get; set; }
     public long ResponseTimeMs { get; set; }
+    public int? HttpStatusCode { get; set; }
+    public DateTime LastChecked { get; set; }
+}
+
+public class AppStatus
+{
+    public bool IsResponding { get; set; }
+    public long ResponseTimeMs { get; set; }
+    public int? HttpStatusCode { get; set; }
     public DateTime LastChecked { get; set; }
 }
 

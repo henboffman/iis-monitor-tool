@@ -1,0 +1,154 @@
+@page "/applications"
+@inject IISMonitorService IISMonitor
+@rendermode InteractiveServer
+
+<PageTitle>IIS Monitor - Applications</PageTitle>
+
+<h1 class="mb-4">Applications</h1>
+
+<div class="row mb-3">
+    <div class="col-md-4">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3 class="text-success">@_apps.Count(a => a.IsResponding)</h3>
+                <small class="text-muted">Healthy</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3 class="text-danger">@_apps.Count(a => a.LastChecked.HasValue && !a.IsResponding)</h3>
+                <small class="text-muted">Unhealthy</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3 class="text-muted">@_apps.Count(a => !a.LastChecked.HasValue)</h3>
+                <small class="text-muted">Pending</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>Application</th>
+                <th>Parent Site</th>
+                <th>App Pool</th>
+                <th>Status</th>
+                <th>Response</th>
+                <th>Last Checked</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var app in _apps.OrderBy(a => a.SiteName).ThenBy(a => a.Path))
+            {
+                <tr class="@GetRowClass(app)">
+                    <td>
+                        <strong>@app.Path</strong>
+                        <br />
+                        <small class="text-muted">@TruncatePath(app.PhysicalPath)</small>
+                    </td>
+                    <td>
+                        @app.SiteName
+                        <span class="badge @(app.SiteState == "Started" ? "bg-success" : "bg-secondary") ms-1">
+                            @app.SiteState
+                        </span>
+                    </td>
+                    <td><code>@app.AppPoolName</code></td>
+                    <td>
+                        @if (app.LastChecked.HasValue)
+                        {
+                            @if (app.IsResponding)
+                            {
+                                <span class="badge bg-success">
+                                    <i class="bi bi-check-circle me-1"></i>@(app.HttpStatusCode ?? 200)
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-danger">
+                                    <i class="bi bi-x-circle me-1"></i>@(app.HttpStatusCode?.ToString() ?? "Error")
+                                </span>
+                            }
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">Pending</span>
+                        }
+                    </td>
+                    <td>
+                        @if (app.LastChecked.HasValue)
+                        {
+                            <span class="@(app.IsResponding ? "text-success" : "text-danger")">
+                                @(app.ResponseTimeMs > 0 ? $"{app.ResponseTimeMs}ms" : "--")
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="text-muted">--</span>
+                        }
+                    </td>
+                    <td>
+                        @if (app.LastChecked.HasValue)
+                        {
+                            <small class="text-muted">@app.LastChecked.Value.ToString("HH:mm:ss")</small>
+                        }
+                        else
+                        {
+                            <small class="text-muted">--</small>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (_apps.Count == 0)
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>
+        No applications (subsites) found. Applications appear when you create sub-applications under IIS sites.
+    </div>
+}
+
+<div class="mt-3">
+    <button class="btn btn-primary" @onclick="RefreshData" disabled="@_isLoading">
+        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+    </button>
+</div>
+
+@code {
+    private List<ApplicationInfo> _apps = new();
+    private bool _isLoading;
+
+    protected override void OnInitialized()
+    {
+        RefreshData();
+    }
+
+    private void RefreshData()
+    {
+        _isLoading = true;
+        _apps = IISMonitor.GetAllApplications();
+        _isLoading = false;
+    }
+
+    private string GetRowClass(ApplicationInfo app)
+    {
+        if (!app.LastChecked.HasValue) return "";
+        return app.IsResponding ? "" : "table-danger";
+    }
+
+    private string TruncatePath(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return "N/A";
+        return path.Length > 40 ? "..." + path[^37..] : path;
+    }
+}

@@ -8,26 +8,29 @@
 <h1 class="mb-4">IIS Server Overview</h1>
 
 <div class="row mb-4">
+    <!-- Applications Health (Primary Focus) -->
+    <div class="col-md-3 mb-3">
+        <div class="card h-100 @(GetAppHealthBorderClass())">
+            <div class="card-body text-center">
+                <i class="bi bi-app-indicator display-4 @(GetAppHealthTextClass())"></i>
+                <h2 class="mt-2">@_apps.Count</h2>
+                <p class="text-muted mb-0">Applications</p>
+                <small class="@(GetAppHealthTextClass())">
+                    @_apps.Count(a => a.IsResponding) healthy /
+                    @_apps.Count(a => a.LastChecked.HasValue && !a.IsResponding) unhealthy
+                </small>
+            </div>
+        </div>
+    </div>
+
     <!-- Sites Summary -->
     <div class="col-md-3 mb-3">
         <div class="card h-100 border-primary">
             <div class="card-body text-center">
                 <i class="bi bi-globe display-4 text-primary"></i>
                 <h2 class="mt-2">@_sites.Count</h2>
-                <p class="text-muted mb-0">Total Sites</p>
+                <p class="text-muted mb-0">Sites</p>
                 <small class="text-success">@_sites.Count(s => s.State == "Started") running</small>
-            </div>
-        </div>
-    </div>
-
-    <!-- App Pools Summary -->
-    <div class="col-md-3 mb-3">
-        <div class="card h-100 border-info">
-            <div class="card-body text-center">
-                <i class="bi bi-collection display-4 text-info"></i>
-                <h2 class="mt-2">@_appPools.Count</h2>
-                <p class="text-muted mb-0">App Pools</p>
-                <small class="text-success">@_appPools.Count(p => p.State == "Started") running</small>
             </div>
         </div>
     </div>
@@ -55,46 +58,51 @@
     </div>
 </div>
 
-<!-- Sites Status -->
+<!-- Applications Status -->
 <div class="row">
     <div class="col-lg-6 mb-4">
         <div class="card">
             <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-globe me-2"></i>Sites Status</h5>
+                <h5 class="mb-0"><i class="bi bi-app-indicator me-2"></i>Applications Status</h5>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-hover mb-0">
                         <thead class="table-light">
                             <tr>
+                                <th>Application</th>
                                 <th>Site</th>
-                                <th>State</th>
-                                <th>App Pool</th>
+                                <th>Status</th>
                                 <th>Response</th>
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach (var site in _sites.Take(10))
+                            @foreach (var app in _apps.OrderByDescending(a => !a.IsResponding && a.LastChecked.HasValue).Take(10))
                             {
-                                <tr>
+                                <tr class="@(!app.IsResponding && app.LastChecked.HasValue ? "table-danger" : "")">
                                     <td>
-                                        @site.Name
-                                        @if (site.Applications.Count > 0)
+                                        <strong>@app.Path</strong>
+                                    </td>
+                                    <td>
+                                        <small>@app.SiteName</small>
+                                    </td>
+                                    <td>
+                                        @if (app.LastChecked.HasValue)
                                         {
-                                            <span class="badge bg-secondary ms-1">+@site.Applications.Count apps</span>
+                                            <span class="badge @(app.IsResponding ? "bg-success" : "bg-danger")">
+                                                @(app.HttpStatusCode?.ToString() ?? (app.IsResponding ? "OK" : "Error"))
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">Pending</span>
                                         }
                                     </td>
                                     <td>
-                                        <span class="badge @(site.State == "Started" ? "bg-success" : "bg-danger")">
-                                            @site.State
-                                        </span>
-                                    </td>
-                                    <td><code>@site.AppPoolName</code></td>
-                                    <td>
-                                        @if (site.LastChecked.HasValue)
+                                        @if (app.LastChecked.HasValue && app.ResponseTimeMs > 0)
                                         {
-                                            <span class="@(site.IsResponding ? "text-success" : "text-danger")">
-                                                @(site.IsResponding ? $"{site.ResponseTimeMs}ms" : "Down")
+                                            <span class="@(app.IsResponding ? "text-success" : "text-danger")">
+                                                @(app.ResponseTimeMs)ms
                                             </span>
                                         }
                                         else
@@ -108,10 +116,16 @@
                     </table>
                 </div>
             </div>
-            @if (_sites.Count > 10)
+            @if (_apps.Count > 10)
             {
                 <div class="card-footer text-center">
-                    <a href="/sites" class="btn btn-sm btn-outline-primary">View all @_sites.Count sites</a>
+                    <a href="/applications" class="btn btn-sm btn-outline-primary">View all @_apps.Count applications</a>
+                </div>
+            }
+            @if (_apps.Count == 0)
+            {
+                <div class="card-body text-center text-muted">
+                    <p>No applications found</p>
                 </div>
             }
         </div>
@@ -174,6 +188,7 @@
 
 @code {
     private List<SiteInfo> _sites = new();
+    private List<ApplicationInfo> _apps = new();
     private List<AppPoolInfo> _appPools = new();
     private EventSummary _eventSummary = new();
     private DateTime _lastUpdate = DateTime.Now;
@@ -192,6 +207,7 @@
         try
         {
             _sites = IISMonitor.GetAllSites();
+            _apps = IISMonitor.GetAllApplications();
             _appPools = IISMonitor.GetAllAppPools();
             _eventSummary = EventLog.GetEventSummary(24);
             _lastUpdate = DateTime.Now;
@@ -200,5 +216,21 @@
         {
             _isLoading = false;
         }
+    }
+
+    private string GetAppHealthBorderClass()
+    {
+        var unhealthyCount = _apps.Count(a => a.LastChecked.HasValue && !a.IsResponding);
+        if (unhealthyCount > 0) return "border-danger";
+        if (_apps.Count == 0) return "border-secondary";
+        return "border-success";
+    }
+
+    private string GetAppHealthTextClass()
+    {
+        var unhealthyCount = _apps.Count(a => a.LastChecked.HasValue && !a.IsResponding);
+        if (unhealthyCount > 0) return "text-danger";
+        if (_apps.Count == 0) return "text-secondary";
+        return "text-success";
     }
 }
