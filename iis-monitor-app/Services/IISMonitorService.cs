@@ -7,8 +7,6 @@ public class IISMonitorService
 {
     private readonly ILogger<IISMonitorService> _logger;
     private readonly ConcurrentDictionary<string, SiteStatus> _siteStatuses = new();
-    private readonly ConcurrentDictionary<string, AppPoolStatus> _appPoolStatuses = new();
-    private DateTime _lastRefresh = DateTime.MinValue;
 
     public IISMonitorService(ILogger<IISMonitorService> logger)
     {

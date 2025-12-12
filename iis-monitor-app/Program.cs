@@ -16,9 +16,10 @@ var app = builder.Build();
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    app.UseHsts();
 }
 
+// Always enforce HTTPS
+app.UseHsts();
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseAntiforgery();
