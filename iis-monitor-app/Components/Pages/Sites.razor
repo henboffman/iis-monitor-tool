@@ -1,0 +1,137 @@
+@page "/sites"
+@inject IISMonitorService IISMonitor
+@rendermode InteractiveServer
+
+<PageTitle>IIS Monitor - Sites</PageTitle>
+
+<h1 class="mb-4">IIS Sites</h1>
+
+<div class="table-responsive">
+    <table class="table table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>ID</th>
+                <th>Site Name</th>
+                <th>State</th>
+                <th>Bindings</th>
+                <th>App Pool</th>
+                <th>Physical Path</th>
+                <th>Response</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var site in _sites)
+            {
+                <tr class="@(site.State != "Started" ? "table-warning" : "")">
+                    <td>@site.Id</td>
+                    <td>
+                        <strong>@site.Name</strong>
+                        @if (site.Applications.Count > 0)
+                        {
+                            <button class="btn btn-sm btn-link p-0 ms-2" @onclick="() => ToggleApps(site.Name)">
+                                <i class="bi @(_expandedSites.Contains(site.Name) ? "bi-chevron-up" : "bi-chevron-down")"></i>
+                                @site.Applications.Count apps
+                            </button>
+                        }
+                    </td>
+                    <td>
+                        <span class="badge @(site.State == "Started" ? "bg-success" : "bg-danger")">
+                            @site.State
+                        </span>
+                    </td>
+                    <td>
+                        @foreach (var binding in site.Bindings)
+                        {
+                            <div><code>@binding.Protocol://@(string.IsNullOrEmpty(binding.Host) ? "*" : binding.Host)@GetPortDisplay(binding)</code></div>
+                        }
+                    </td>
+                    <td><code>@site.AppPoolName</code></td>
+                    <td><small class="text-muted">@TruncatePath(site.PhysicalPath)</small></td>
+                    <td>
+                        @if (site.LastChecked.HasValue)
+                        {
+                            <span class="@(site.IsResponding ? "text-success" : "text-danger")">
+                                @(site.IsResponding ? $"{site.ResponseTimeMs}ms" : "Down")
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="text-muted">--</span>
+                        }
+                    </td>
+                </tr>
+
+                @if (_expandedSites.Contains(site.Name))
+                {
+                    foreach (var app in site.Applications)
+                    {
+                        <tr class="table-light">
+                            <td></td>
+                            <td class="ps-4">
+                                <i class="bi bi-arrow-return-right me-2 text-muted"></i>
+                                @app.Path
+                            </td>
+                            <td><span class="badge bg-info">Sub-app</span></td>
+                            <td><small>@app.EnabledProtocols</small></td>
+                            <td><code>@app.AppPoolName</code></td>
+                            <td><small class="text-muted">@TruncatePath(app.PhysicalPath)</small></td>
+                            <td></td>
+                        </tr>
+                    }
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+<div class="mt-3">
+    <button class="btn btn-primary" @onclick="RefreshData" disabled="@_isLoading">
+        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+    </button>
+</div>
+
+@code {
+    private List<SiteInfo> _sites = new();
+    private HashSet<string> _expandedSites = new();
+    private bool _isLoading;
+
+    protected override void OnInitialized()
+    {
+        RefreshData();
+    }
+
+    private void RefreshData()
+    {
+        _isLoading = true;
+        _sites = IISMonitor.GetAllSites();
+        _isLoading = false;
+    }
+
+    private void ToggleApps(string siteName)
+    {
+        if (_expandedSites.Contains(siteName))
+            _expandedSites.Remove(siteName);
+        else
+            _expandedSites.Add(siteName);
+    }
+
+    private string GetPortDisplay(BindingInfo binding)
+    {
+        var parts = binding.BindingInformation.Split(':');
+        if (parts.Length >= 2)
+        {
+            var port = parts[1];
+            if ((binding.Protocol == "http" && port == "80") ||
+                (binding.Protocol == "https" && port == "443"))
+                return "";
+            return $":{port}";
+        }
+        return "";
+    }
+
+    private string TruncatePath(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return "N/A";
+        return path.Length > 50 ? "..." + path[^47..] : path;
+    }
+}

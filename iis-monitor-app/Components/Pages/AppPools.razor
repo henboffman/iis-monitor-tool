@@ -1,0 +1,117 @@
+@page "/apppools"
+@inject IISMonitorService IISMonitor
+@rendermode InteractiveServer
+
+<PageTitle>IIS Monitor - App Pools</PageTitle>
+
+<h1 class="mb-4">Application Pools</h1>
+
+<div class="row">
+    @foreach (var pool in _appPools)
+    {
+        <div class="col-lg-6 mb-4">
+            <div class="card @(pool.State != "Started" ? "border-danger" : "")">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">@pool.Name</h5>
+                    <span class="badge @(pool.State == "Started" ? "bg-success" : "bg-danger") fs-6">
+                        @pool.State
+                    </span>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Configuration</h6>
+                            <table class="table table-sm">
+                                <tbody>
+                                    <tr>
+                                        <td>Runtime</td>
+                                        <td><code>@(string.IsNullOrEmpty(pool.ManagedRuntimeVersion) ? "No Managed Code" : pool.ManagedRuntimeVersion)</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Pipeline</td>
+                                        <td>@pool.ManagedPipelineMode</td>
+                                    </tr>
+                                    <tr>
+                                        <td>32-bit Mode</td>
+                                        <td>@(pool.Enable32BitAppOnWin64 ? "Yes" : "No")</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Identity</td>
+                                        <td>@pool.ProcessModel.IdentityType</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Start Mode</td>
+                                        <td>@pool.StartMode</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Process Info</h6>
+                            @if (pool.WorkerProcesses.Count > 0)
+                            {
+                                @foreach (var wp in pool.WorkerProcesses)
+                                {
+                                    <div class="mb-2">
+                                        <strong>PID:</strong> @wp.ProcessId<br />
+                                        <strong>State:</strong> @wp.State<br />
+                                        @if (wp.StartTime.HasValue)
+                                        {
+                                            <strong>Uptime:</strong> @FormatUptime(DateTime.Now - wp.StartTime.Value)
+                                        }
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <p class="text-muted">No worker processes</p>
+                            }
+
+                            <h6 class="mt-3">Recycling</h6>
+                            <small>
+                                <strong>Interval:</strong> @(pool.Recycling.RegularTimeInterval.TotalMinutes > 0 ? pool.Recycling.RegularTimeInterval.ToString() : "Disabled")<br />
+                                <strong>Idle Timeout:</strong> @pool.ProcessModel.IdleTimeout<br />
+                                @if (pool.Recycling.PrivateMemory > 0)
+                                {
+                                    <strong>Memory Limit:</strong> @(pool.Recycling.PrivateMemory / 1024)MB<br />
+                                }
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<div class="mt-3">
+    <button class="btn btn-primary" @onclick="RefreshData" disabled="@_isLoading">
+        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+    </button>
+</div>
+
+@code {
+    private List<AppPoolInfo> _appPools = new();
+    private bool _isLoading;
+
+    protected override void OnInitialized()
+    {
+        RefreshData();
+    }
+
+    private void RefreshData()
+    {
+        _isLoading = true;
+        _appPools = IISMonitor.GetAllAppPools();
+        _isLoading = false;
+    }
+
+    private string FormatUptime(TimeSpan uptime)
+    {
+        if (uptime.TotalDays >= 1)
+            return $"{(int)uptime.TotalDays}d {uptime.Hours}h {uptime.Minutes}m";
+        if (uptime.TotalHours >= 1)
+            return $"{(int)uptime.TotalHours}h {uptime.Minutes}m";
+        return $"{uptime.Minutes}m {uptime.Seconds}s";
+    }
+}

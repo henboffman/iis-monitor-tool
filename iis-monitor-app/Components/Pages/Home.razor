@@ -1,0 +1,204 @@
+@page "/"
+@inject IISMonitorService IISMonitor
+@inject EventLogService EventLog
+@rendermode InteractiveServer
+
+<PageTitle>IIS Monitor - Overview</PageTitle>
+
+<h1 class="mb-4">IIS Server Overview</h1>
+
+<div class="row mb-4">
+    <!-- Sites Summary -->
+    <div class="col-md-3 mb-3">
+        <div class="card h-100 border-primary">
+            <div class="card-body text-center">
+                <i class="bi bi-globe display-4 text-primary"></i>
+                <h2 class="mt-2">@_sites.Count</h2>
+                <p class="text-muted mb-0">Total Sites</p>
+                <small class="text-success">@_sites.Count(s => s.State == "Started") running</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- App Pools Summary -->
+    <div class="col-md-3 mb-3">
+        <div class="card h-100 border-info">
+            <div class="card-body text-center">
+                <i class="bi bi-collection display-4 text-info"></i>
+                <h2 class="mt-2">@_appPools.Count</h2>
+                <p class="text-muted mb-0">App Pools</p>
+                <small class="text-success">@_appPools.Count(p => p.State == "Started") running</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Errors -->
+    <div class="col-md-3 mb-3">
+        <div class="card h-100 @(_eventSummary.TotalErrors > 0 ? "border-danger" : "border-success")">
+            <div class="card-body text-center">
+                <i class="bi bi-x-circle display-4 @(_eventSummary.TotalErrors > 0 ? "text-danger" : "text-success")"></i>
+                <h2 class="mt-2">@_eventSummary.TotalErrors</h2>
+                <p class="text-muted mb-0">Errors (24h)</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Warnings -->
+    <div class="col-md-3 mb-3">
+        <div class="card h-100 @(_eventSummary.TotalWarnings > 0 ? "border-warning" : "border-success")">
+            <div class="card-body text-center">
+                <i class="bi bi-exclamation-triangle display-4 @(_eventSummary.TotalWarnings > 0 ? "text-warning" : "text-success")"></i>
+                <h2 class="mt-2">@_eventSummary.TotalWarnings</h2>
+                <p class="text-muted mb-0">Warnings (24h)</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Sites Status -->
+<div class="row">
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-globe me-2"></i>Sites Status</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Site</th>
+                                <th>State</th>
+                                <th>App Pool</th>
+                                <th>Response</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var site in _sites.Take(10))
+                            {
+                                <tr>
+                                    <td>
+                                        @site.Name
+                                        @if (site.Applications.Count > 0)
+                                        {
+                                            <span class="badge bg-secondary ms-1">+@site.Applications.Count apps</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="badge @(site.State == "Started" ? "bg-success" : "bg-danger")">
+                                            @site.State
+                                        </span>
+                                    </td>
+                                    <td><code>@site.AppPoolName</code></td>
+                                    <td>
+                                        @if (site.LastChecked.HasValue)
+                                        {
+                                            <span class="@(site.IsResponding ? "text-success" : "text-danger")">
+                                                @(site.IsResponding ? $"{site.ResponseTimeMs}ms" : "Down")
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">--</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            @if (_sites.Count > 10)
+            {
+                <div class="card-footer text-center">
+                    <a href="/sites" class="btn btn-sm btn-outline-primary">View all @_sites.Count sites</a>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Recent Events -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Recent Events</h5>
+            </div>
+            <div class="card-body p-0">
+                @if (_eventSummary.RecentEvents.Count > 0)
+                {
+                    <div class="list-group list-group-flush">
+                        @foreach (var evt in _eventSummary.RecentEvents.Take(8))
+                        {
+                            <div class="list-group-item">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <span class="badge @(evt.EventType == "Error" ? "bg-danger" : "bg-warning") me-2">
+                                            @evt.EventType
+                                        </span>
+                                        <strong>@evt.Source</strong>
+                                    </div>
+                                    <small class="text-muted">@evt.TimeGenerated.ToString("HH:mm")</small>
+                                </div>
+                                <small class="text-muted d-block mt-1 text-truncate" style="max-width: 100%;">
+                                    @evt.Message
+                                </small>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center py-4 text-muted">
+                        <i class="bi bi-check-circle display-4"></i>
+                        <p class="mt-2">No errors or warnings in the last 24 hours</p>
+                    </div>
+                }
+            </div>
+            @if (_eventSummary.RecentEvents.Count > 8)
+            {
+                <div class="card-footer text-center">
+                    <a href="/events" class="btn btn-sm btn-outline-primary">View all events</a>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="mt-3 text-center">
+    <button class="btn btn-primary" @onclick="RefreshData" disabled="@_isLoading">
+        <i class="bi bi-arrow-clockwise me-1"></i>
+        @(_isLoading ? "Refreshing..." : "Refresh")
+    </button>
+    <small class="text-muted ms-3">Last updated: @_lastUpdate.ToString("HH:mm:ss")</small>
+</div>
+
+@code {
+    private List<SiteInfo> _sites = new();
+    private List<AppPoolInfo> _appPools = new();
+    private EventSummary _eventSummary = new();
+    private DateTime _lastUpdate = DateTime.Now;
+    private bool _isLoading;
+
+    protected override void OnInitialized()
+    {
+        RefreshData();
+    }
+
+    private void RefreshData()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            _sites = IISMonitor.GetAllSites();
+            _appPools = IISMonitor.GetAllAppPools();
+            _eventSummary = EventLog.GetEventSummary(24);
+            _lastUpdate = DateTime.Now;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}

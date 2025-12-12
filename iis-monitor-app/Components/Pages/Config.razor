@@ -1,0 +1,152 @@
+@page "/config"
+@inject IISMonitorService IISMonitor
+@rendermode InteractiveServer
+
+<PageTitle>IIS Monitor - Config Differences</PageTitle>
+
+<h1 class="mb-4">Configuration Comparison</h1>
+
+<p class="text-muted mb-4">
+    This page compares app pool configurations against the first app pool as a baseline.
+    Differences are highlighted to help identify configuration inconsistencies.
+</p>
+
+@if (_appPools.Count == 0)
+{
+    <div class="alert alert-info">Loading app pool data...</div>
+}
+else if (_appPools.Count == 1)
+{
+    <div class="alert alert-info">Only one app pool found. Nothing to compare.</div>
+}
+else
+{
+    <!-- Baseline Info -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Baseline: @_appPools.First().Name</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <strong>Runtime:</strong> @(_appPools.First().ManagedRuntimeVersion ?? "No Managed Code")
+                </div>
+                <div class="col-md-4">
+                    <strong>Pipeline:</strong> @_appPools.First().ManagedPipelineMode
+                </div>
+                <div class="col-md-4">
+                    <strong>Identity:</strong> @_appPools.First().ProcessModel.IdentityType
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Differences -->
+    @if (_differences.Count == 0)
+    {
+        <div class="alert alert-success">
+            <i class="bi bi-check-circle me-2"></i>
+            All app pools have identical configurations!
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-warning mb-4">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            Found configuration differences in @_differences.Count app pool(s)
+        </div>
+
+        @foreach (var kvp in _differences)
+        {
+            <div class="card mb-3 border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h6 class="mb-0">@kvp.Key</h6>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Setting</th>
+                                <th>Baseline Value</th>
+                                <th>Current Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var diff in kvp.Value)
+                            {
+                                <tr>
+                                    <td>@diff.Setting</td>
+                                    <td><code>@diff.BaseValue</code></td>
+                                    <td><code class="text-danger">@diff.CurrentValue</code></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    }
+
+    <!-- Full Configuration Table -->
+    <h3 class="mt-5 mb-3">Full Configuration Matrix</h3>
+    <div class="table-responsive">
+        <table class="table table-bordered table-sm">
+            <thead class="table-dark">
+                <tr>
+                    <th>App Pool</th>
+                    <th>State</th>
+                    <th>Runtime</th>
+                    <th>Pipeline</th>
+                    <th>32-bit</th>
+                    <th>Identity</th>
+                    <th>Idle Timeout</th>
+                    <th>Recycle Interval</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var pool in _appPools)
+                {
+                    <tr>
+                        <td><strong>@pool.Name</strong></td>
+                        <td>
+                            <span class="badge @(pool.State == "Started" ? "bg-success" : "bg-danger")">
+                                @pool.State
+                            </span>
+                        </td>
+                        <td>@(string.IsNullOrEmpty(pool.ManagedRuntimeVersion) ? "None" : pool.ManagedRuntimeVersion)</td>
+                        <td>@pool.ManagedPipelineMode</td>
+                        <td>@(pool.Enable32BitAppOnWin64 ? "Yes" : "No")</td>
+                        <td>@pool.ProcessModel.IdentityType</td>
+                        <td>@pool.ProcessModel.IdleTimeout</td>
+                        <td>@(pool.Recycling.RegularTimeInterval.TotalMinutes > 0 ? pool.Recycling.RegularTimeInterval.ToString() : "Disabled")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<div class="mt-3">
+    <button class="btn btn-primary" @onclick="RefreshData" disabled="@_isLoading">
+        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+    </button>
+</div>
+
+@code {
+    private List<AppPoolInfo> _appPools = new();
+    private Dictionary<string, List<ConfigDifference>> _differences = new();
+    private bool _isLoading;
+
+    protected override void OnInitialized()
+    {
+        RefreshData();
+    }
+
+    private void RefreshData()
+    {
+        _isLoading = true;
+        _appPools = IISMonitor.GetAllAppPools();
+        _differences = IISMonitor.CompareConfigurations();
+        _isLoading = false;
+    }
+}
