@@ -51,7 +51,7 @@
             {
                 <tr class="@GetRowClass(app)" style="cursor: pointer;" @onclick="() => NavigateToApp(app)">
                     <td>
-                        <a href="/applications/@Uri.EscapeDataString(app.SiteName)@app.Path" class="text-decoration-none">
+                        <a href="@($"/applications/{Uri.EscapeDataString(app.SiteName)}{app.Path}")" class="text-decoration-none">
                             <strong>@app.Path</strong>
                         </a>
                         <br />
